@@ -56,16 +56,16 @@ This is the length of the backlog queue.
 .RE
 .RE
 .RS 8
-- \fBkB/s\fR
+- \fBkB/s (MB/s)\fR
 .RS
-This is the number of kB written/read per second.
+This is the number of kB (or MB) written/read per second.
 .RE
 .RE
 .RE
 .RS 8
-- \fBkB/op\fR
+- \fBkB/op (MB/op)\fR
 .RS
-This is the number of kB written/read per each operation.
+This is the number of kB (or MB) written/read per each operation.
 .RE
 .RE
 .RE
@@ -121,6 +121,9 @@ shows help message and exit
 .TP
 .B \-l LIST or " \-\-list=LIST 
 only print stats for first LIST mount points
+.TP
+.B \-m or " \-\-megabytes
+display throughput in megabytes per second
 .TP
 .B \-p " or " \-\-page
 displays statistics related to the page cache

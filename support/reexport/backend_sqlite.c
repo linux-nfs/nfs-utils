@@ -9,6 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/syscall.h>
+
 #ifdef HAVE_GETRANDOM
 # include <sys/random.h>
 # if !defined(SYS_getrandom) && defined(__NR_getrandom)

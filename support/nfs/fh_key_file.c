@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
 #include <uuid/uuid.h>
 
 #include "nfslib.h"

@@ -33,11 +33,8 @@ int v4root_needed;
 static void cond_rename(char *newfile, char *oldfile);
 
 static int
-xtab_read(char *xtab, char *lockfn, int is_export)
+xtab_read(char *xtab, char *lockfn)
 {
-    /* is_export == 0  => reading /proc/fs/nfs/exports - we know these things are exported to kernel
-     * is_export == 1  => reading /var/lib/nfs/etab - these things are allowed to be exported
-     */
 	struct exportent	*xp;
 	nfs_export		*exp;
 	int			lockid;
@@ -45,11 +42,10 @@ xtab_read(char *xtab, char *lockfn, int is_export)
 	if ((lockid = xflock(lockfn, "r")) < 0)
 		return 0;
 	setexportent(xtab, "r");
-	if (is_export == 1)
-		v4root_needed = 1;
-	while ((xp = getexportent(is_export==0)) != NULL) {
-		if (!(exp = export_lookup(xp->e_hostname, xp->e_path, is_export != 1)) &&
-		    !(exp = export_create(xp, is_export!=1))) {
+	v4root_needed = 1;
+	while ((xp = getexportent(0)) != NULL) {
+		if (!(exp = export_lookup(xp->e_hostname, xp->e_path, 0)) &&
+		    !(exp = export_create(xp, 0))) {
                         if(xp->e_hostname) {
                             free(xp->e_hostname);
                             xp->e_hostname=NULL;
@@ -60,17 +56,10 @@ xtab_read(char *xtab, char *lockfn, int is_export)
                         }
 			continue;
 		}
-		switch (is_export) {
-		case 0:
-			exp->m_exported = 1;
-			break;
-		case 1:
-			exp->m_xtabent = 1;
-			exp->m_mayexport = 1;
-			if ((xp->e_flags & NFSEXP_FSID) && xp->e_fsid == 0)
-				v4root_needed = 0;
-			break;
-		}  
+		exp->m_xtabent = 1;
+		exp->m_mayexport = 1;
+		if ((xp->e_flags & NFSEXP_FSID) && xp->e_fsid == 0)
+			v4root_needed = 0;
                 if(xp->e_hostname) {
                     free(xp->e_hostname);
                     xp->e_hostname=NULL;
@@ -90,7 +79,7 @@ xtab_read(char *xtab, char *lockfn, int is_export)
 int
 xtab_export_read(void)
 {
-	return xtab_read(etab.statefn, etab.lockfn, 1);
+	return xtab_read(etab.statefn, etab.lockfn);
 }
 
 /*
@@ -100,7 +89,7 @@ xtab_export_read(void)
  * fix the auth_reload logic as well...
  */
 static int
-xtab_write(char *xtab, char *xtabtmp, char *lockfn, int is_export)
+xtab_write(char *xtab, char *xtabtmp, char *lockfn)
 {
 	struct exportent	xe;
 	nfs_export		*exp;
@@ -114,9 +103,7 @@ xtab_write(char *xtab, char *xtabtmp, char *lockfn, int is_export)
 
 	for (i = 0; i < MCL_MAXTYPES; i++) {
 		for (exp = exportlist[i].p_head; exp; exp = exp->m_next) {
-			if (is_export && !exp->m_xtabent)
-				continue;
-			if (!is_export && ! exp->m_exported)
+			if (!exp->m_xtabent)
 				continue;
 
 			/* write out the export entry using the FQDN */
@@ -137,7 +124,7 @@ xtab_write(char *xtab, char *xtabtmp, char *lockfn, int is_export)
 int
 xtab_export_write(void)
 {
-	return xtab_write(etab.statefn, etab.tmpfn, etab.lockfn, 1);
+	return xtab_write(etab.statefn, etab.tmpfn, etab.lockfn);
 }
 
 /*

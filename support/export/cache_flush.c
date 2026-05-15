@@ -38,6 +38,8 @@ extern int no_netlink;
 #include "sunrpc_netlink.h"
 #endif
 
+#include "compat.h"
+
 static int nl_send_flush(struct nl_sock *sock, int family, int cmd)
 {
 	struct nl_msg *msg;

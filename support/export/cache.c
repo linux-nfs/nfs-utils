@@ -40,7 +40,7 @@
 #include <netlink/genl/ctrl.h>
 #include <netlink/msg.h>
 #include <netlink/attr.h>
-#include <linux/netlink.h>
+#include "compat.h"
 
 #ifdef USE_SYSTEM_NFSD_NETLINK_H
 #include <linux/nfsd_netlink.h>

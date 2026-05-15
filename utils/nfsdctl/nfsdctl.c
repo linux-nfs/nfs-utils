@@ -26,6 +26,7 @@
 #include <netlink/msg.h>
 #include <netlink/attr.h>
 #include <linux/netlink.h>
+#include "compat.h"
 
 #include <readline/readline.h>
 #include <readline/history.h>

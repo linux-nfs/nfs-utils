@@ -409,15 +409,14 @@ int nfs4_init_name_mapping(char *conffile)
 	if (idmap_verbosity >= 1) {
 		struct conf_list_node *r;
 		char *buf = NULL;
-		int siz=0;
+		size_t siz = 1;
 
 		if (local_realms) {
 			TAILQ_FOREACH(r, &local_realms->fields, link) {
 				siz += (strlen(r->field)+4);
 			}
-			buf = malloc(siz);
+			buf = calloc(1, siz);
 			if (buf) {
-				*buf = 0;
 				TAILQ_FOREACH(r, &local_realms->fields, link) {
 					sprintf(buf+strlen(buf), "'%s' ", r->field);
 				}

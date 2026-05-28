@@ -16,6 +16,7 @@
 #include <netlink/msg.h>
 #include <netlink/attr.h>
 
+#include "nfslib.h"
 #include "xlog.h"
 #include "nfsdnl.h"
 
@@ -27,7 +28,7 @@
 
 #define NFSDNL_BUFSIZE	(4096)
 
-static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
+static int error_handler(struct sockaddr_nl *UNUSED(nla), struct nlmsgerr *err,
 			 void *arg)
 {
 	int *ret = arg;
@@ -35,14 +36,14 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
 	return NL_STOP;
 }
 
-static int finish_handler(struct nl_msg *msg, void *arg)
+static int finish_handler(struct nl_msg *UNUSED(msg), void *arg)
 {
 	int *ret = arg;
 	*ret = 0;
 	return NL_SKIP;
 }
 
-static int ack_handler(struct nl_msg *msg __attribute__((unused)),
+static int ack_handler(struct nl_msg *UNUSED(msg),
 		       void *arg)
 {
 	int *ret = arg;

@@ -311,12 +311,16 @@ main(int argc, char **argv)
 				argv[0], count);
 			count = 1;
 		} else if (count == 0) {
-			/*
-			 * don't bother setting anything else if the threads
-			 * are coming down anyway.
-			 */
-			socket_up = 1;
-			goto set_threads;
+			if (nfssvc_inuse()) {
+				/*
+				 * don't bother setting anything else if the threads
+				 * are coming down anyway.
+				 */
+				socket_up = 1;
+				goto set_threads;
+			} else {
+				goto out;
+			}
 		}
 	}
 

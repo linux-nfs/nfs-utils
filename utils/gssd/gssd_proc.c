@@ -984,6 +984,7 @@ start_upcall_thread(void (*func)(struct clnt_upcall_info *), struct clnt_upcall_
 	tinfo->timeout.tv_sec += upcall_timeout;
 	TAILQ_INSERT_TAIL(&active_thread_list, tinfo, list);
 	pthread_mutex_unlock(&active_thread_list_lock);
+	pthread_attr_destroy(&attr);
 
 	return ret;
 }

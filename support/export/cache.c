@@ -3072,6 +3072,8 @@ void cache_open(void)
 			 * were queued before we opened the socket.
 			 */
 			auth_reload();
+			if (no_netlink)
+				goto fallback;
 			cache_nl_process_export();
 			cache_nl_process_expkey();
 			cache_nl_process_ip_map();
@@ -3079,11 +3081,16 @@ void cache_open(void)
 				cache_nl_process_unix_gid();
 			return;
 		}
+fallback:
 		xlog(L_NOTICE, "sunrpc netlink family unavailable, falling back to /proc");
 		nl_socket_free(nfsd_nl_notify_sock);
 		nfsd_nl_notify_sock = NULL;
 		nl_socket_free(nfsd_nl_cmd_sock);
 		nfsd_nl_cmd_sock = NULL;
+		nl_socket_free(sunrpc_nl_notify_sock);
+		sunrpc_nl_notify_sock = NULL;
+		nl_socket_free(sunrpc_nl_cmd_sock);
+		sunrpc_nl_cmd_sock = NULL;
 	}
 
 	for (i=0; cachelist[i].cache_name; i++ ) {

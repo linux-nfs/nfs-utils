@@ -164,5 +164,6 @@ cache_flush(void)
 		return;
 	}
 	/* Fallback: /proc path */
+	no_netlink = 1;
 	cache_proc_flush();
 }

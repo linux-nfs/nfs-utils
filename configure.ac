@@ -259,9 +259,9 @@ AC_CHECK_HEADERS(linux/nfsd_netlink.h)
 AC_DEFINE([HAVE_NFSD_NETLINK], 1,
 	  [Define to 1 if nfsd generic netlink support is available])
 
-# ensure we have the expkey attributes
+# ensure the system netlink headers have the latest features
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <linux/nfsd_netlink.h>]],
-			                   [[int foo = NFSD_A_EXPKEY_SEQNO;]])],
+			                   [[int foo = NFSD_CMD_SERVER_STATS_GET;]])],
 			   [AC_DEFINE([USE_SYSTEM_NFSD_NETLINK_H], 1,
 				      ["Use system's linux/nfsd_netlink.h"])])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <linux/lockd_netlink.h>]],

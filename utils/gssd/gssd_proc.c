@@ -897,6 +897,9 @@ out_srchost:
 	if (info->srchost)
 		free(info->srchost);
 out_info:
+	pthread_mutex_lock(&clp_lock);
+	clp->refcount--;
+	pthread_mutex_unlock(&clp_lock);
 	free(info);
 	info = NULL;
 	goto out;

@@ -122,7 +122,7 @@ export_read(char *fname, int ignore_hosts)
 	while ((eep = getexportent(0)) != NULL) {
 		exp = export_lookup(eep->e_hostname, eep->e_path, ignore_hosts);
 		if (!exp) {
-			if (export_create(eep, 0))
+			if (export_create(eep, ignore_hosts))
 				/* possible complaints already logged */
 				volumes++;
 		}

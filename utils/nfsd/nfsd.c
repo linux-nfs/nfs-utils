@@ -185,7 +185,7 @@ main(int argc, char **argv)
 				hcounter = 0;
 			}
 			if (hcounter) {
-				haddr = realloc(haddr, sizeof(char*) * hcounter+1);
+				haddr = realloc(haddr, sizeof(char*) * (hcounter+1));
 				if(!haddr) {
 					fprintf(stderr, "%s: unable to allocate "
 							"memory.\n", progname);

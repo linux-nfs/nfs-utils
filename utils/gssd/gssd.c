@@ -360,6 +360,10 @@ gssd_read_service_info(int dirfd, struct clnt_info *clp)
 	clp->prog = program;
 	clp->vers = version;
 	clp->protocol = protoname;
+	clp->upcall_address = NULL;
+	clp->upcall_port = NULL;
+	clp->upcall_protoname = NULL;
+	clp->upcall_service = NULL;
 
 	goto out;
 
@@ -414,16 +418,16 @@ gssd_free_client(struct clnt_info *clp)
 	free(clp->servicename);
 	free(clp->servername);
 	free(clp->protocol);
-	if (!clp->servername) {
-		if (clp->upcall_address)
-			free(clp->upcall_address);
-		if (clp->upcall_port)
-			free(clp->upcall_port);
-		if (clp->upcall_protoname)
-			free(clp->upcall_protoname);
-		if (clp->upcall_service)
-			free(clp->upcall_service);
-	}
+
+	if (clp->upcall_address)
+		free(clp->upcall_address);
+	if (clp->upcall_port)
+		free(clp->upcall_port);
+	if (clp->upcall_protoname)
+		free(clp->upcall_protoname);
+	if (clp->upcall_service)
+		free(clp->upcall_service);
+
 	free(clp);
 }
 

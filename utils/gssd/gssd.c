@@ -769,7 +769,7 @@ gssd_get_topdir(const char *name)
 	tdi->wd = inotify_add_watch(inotify_fd, name, IN_CREATE);
 	if (tdi->wd < 0) {
 		printerr(0, "ERROR: %s: inotify_add_watch failed for top dir %s: %s\n",
-			 __FUNCTION__, tdi->name, strerror(errno));
+			 __FUNCTION__, name, strerror(errno));
 		free(tdi);
 		return NULL;
 	}

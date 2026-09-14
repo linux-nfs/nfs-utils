@@ -153,6 +153,8 @@ usage(void)
 	fprintf(stderr,"      -d, --no-syslog      Verbose logging to stderr.  Foreground mode only.\n");
 	fprintf(stderr,"      -p, --port           Port to listen on\n");
 	fprintf(stderr,"      -o, --outgoing-port  Port for outgoing connections\n");
+	fprintf(stderr,"      -T, --nlm-port       NLM TCP port (and UDP, unless set separately)\n");
+	fprintf(stderr,"      -U, --nlm-udp-port   NLM UDP port\n");
 	fprintf(stderr,"      -V, -v, --version    Display version information and exit.\n");
 	fprintf(stderr,"      -n, --name           Specify a local hostname.\n");
 	fprintf(stderr,"      -P                   State directory path.\n");

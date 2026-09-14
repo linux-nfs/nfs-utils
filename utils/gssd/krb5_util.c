@@ -841,8 +841,13 @@ find_keytab_entry(krb5_context context, krb5_keytab kt,
 
 	/* Get full local hostname */
 	if (srchost) {
-		strcpy(myhostname, srchost);
-	        strcpy(myhostad, myhostname);
+		retval = snprintf(myhostname, sizeof(myhostname), "%s", srchost);
+		if (retval < 0 || (size_t)retval >= sizeof(myhostname)) {
+			retval = ENAMETOOLONG;
+			printerr(1, "source hostname is too long\n");
+			goto out;
+		}
+		strcpy(myhostad, myhostname);
 	} else {
 		/* Borrow myhostad for gethostname(), we need it later anyways */
 		if (gethostname(myhostad, sizeof(myhostad)-1) == -1) {

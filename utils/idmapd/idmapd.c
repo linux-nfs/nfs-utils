@@ -767,8 +767,6 @@ nfsdcb(int UNUSED(fd), short which, void *data)
 static void
 imconv(struct idmap_client *ic, struct idmap_msg *im)
 {
-	u_int32_t len;
-
 	switch (im->im_conv) {
 	case IDMAP_CONV_IDTONAME:
 		idtonameres(im);
@@ -779,10 +777,11 @@ imconv(struct idmap_client *ic, struct idmap_msg *im)
 			    im->im_id, im->im_name);
 		break;
 	case IDMAP_CONV_NAMETOID:
-		len = strnlen(im->im_name, IDMAP_NAMESZ - 1);
 		/* Check for NULL termination just to be careful */
-		if (im->im_name[len+1] != '\0')
+		if (strnlen(im->im_name, IDMAP_NAMESZ) == IDMAP_NAMESZ) {
+			im->im_status |= IDMAP_STATUS_INVALIDMSG;
 			return;
+		}
 		nametoidres(im);
 		if (verbose > 1)
 			xlog_warn("%s %s: (%s) name \"%s\" -> id \"%d\"",

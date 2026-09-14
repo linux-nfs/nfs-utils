@@ -8,7 +8,7 @@
 rpc.gssd \- RPCSEC_GSS daemon
 .SH SYNOPSIS
 .B rpc.gssd
-.RB [ \-DfMnlvrHC ]
+.RB [ \-DfMnvrHC ]
 .RB [ \-k
 .IR keytab ]
 .RB [ \-p

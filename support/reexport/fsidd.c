@@ -7,6 +7,7 @@
 #include <dlfcn.h>
 #endif
 #include <event2/event.h>
+#include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -158,6 +159,8 @@ static void srv_cb(evutil_socket_t fd, short ev, void *d)
 {
 	int cl = accept4(fd, NULL, NULL, SOCK_NONBLOCK);
 	struct event *client_ev;
+	struct ucred cred;
+	socklen_t clen = sizeof(cred);
 
 	if (cl == -1) {
 		if (errno == EMFILE || errno == ENFILE || errno == ENOMEM ||
@@ -172,6 +175,12 @@ static void srv_cb(evutil_socket_t fd, short ev, void *d)
 	
 	(void)ev;
 	(void)d;
+
+	if (getsockopt(cl, SOL_SOCKET, SO_PEERCRED, &cred, &clen) < 0 ||
+	    cred.uid != 0) {
+		close(cl);
+		return;
+	}
 
 	client_ev = event_new(evbase, cl, EV_READ | EV_PERSIST | EV_CLOSED, client_cb, event_self_cbarg());
 	if (!client_ev || event_add(client_ev, NULL) == -1) {

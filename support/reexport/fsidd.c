@@ -49,7 +49,11 @@ static void client_cb(evutil_socket_t cl, short ev, void *d)
 		char *answer = NULL;
 		bool found;
 
-		assert(req_path < buf + n );
+		if (req_path >= buf + n) {
+			char answer[] = "- Command failed: Bad input";
+			(void)send(cl, answer, strlen(answer), 0);
+			return;
+		}
 
 		printf("client asks for %s\n", req_path);
 
@@ -71,8 +75,11 @@ static void client_cb(evutil_socket_t cl, short ev, void *d)
 		char *answer = NULL;
 		bool found;
 
-		assert(req_path < buf + n );
-
+		if (req_path >= buf + n) {
+			char answer[] = "- Command failed: Bad input";
+			(void)send(cl, answer, strlen(answer), 0);
+			return;
+		}
 
 		if (dbbackend->fsidnum_by_path(req_path, &fsidnum, true, &found)) {
 			if (found) {
@@ -95,7 +102,11 @@ static void client_cb(evutil_socket_t cl, short ev, void *d)
 		uint32_t fsidnum;
 		bool found;
 
-		assert(req_fsidnum < buf + n );
+		if (req_fsidnum >= buf + n) {
+			char answer[] = "- Command failed: Bad input";
+			(void)send(cl, answer, strlen(answer), 0);
+			return;
+		}
 
 		errno = 0;
 		fsidnum = strtoul(req_fsidnum, &endp, 10);

@@ -275,6 +275,21 @@ gssd_read_service_info(int dirfd, struct clnt_info *clp)
 	char *port = NULL;
 	char *servername = NULL;
 
+	/*
+	 * This may be a re-scan of a client whose previous read failed
+	 * (gssd_scan_clnt only calls us while clp->prog == 0, which the fail
+	 * path below leaves set).  Free any upcall_* values left over from that
+	 * attempt so we don't leak them when we repopulate the fields below.
+	 */
+	free(clp->upcall_address);
+	free(clp->upcall_port);
+	free(clp->upcall_protoname);
+	free(clp->upcall_service);
+	clp->upcall_address = NULL;
+	clp->upcall_port = NULL;
+	clp->upcall_protoname = NULL;
+	clp->upcall_service = NULL;
+
 	fd = openat(dirfd, "info", O_RDONLY);
 	if (fd < 0) {
 		printerr(0, "ERROR: can't open %s/info: %s\n",

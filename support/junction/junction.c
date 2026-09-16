@@ -293,7 +293,7 @@ junction_get_xattr(int fd, const char *path, const char *name, void **contents,
 		return FEDFS_ERR_ACCESS;
 	}
 
-	xattrbuf = malloc((size_t)len);
+	xattrbuf = malloc((size_t)len + 1);
 	if (xattrbuf == NULL) {
 		xlog(D_GENERAL, "%s: failed to get buffer for xattr %s on %s",
 			__func__, name, path);
@@ -307,6 +307,7 @@ junction_get_xattr(int fd, const char *path, const char *name, void **contents,
 		return FEDFS_ERR_ACCESS;
 	}
 
+	((char *) xattrbuf)[len] = '\0';
 	xlog(D_CALL, "%s: read xattr %s from path %s",
 			__func__, name, path);
 	*contents = xattrbuf;

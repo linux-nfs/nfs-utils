@@ -225,7 +225,6 @@ sm_mon_1_svc(struct mon *argp, struct svc_req *rqstp)
 
 failure:
 	xlog_warn("STAT_FAIL to %s for SM_MON of %s", my_name, mon_name);
-	free(clnt);
 	return (&result);
 }
 
@@ -245,7 +244,6 @@ load_one_host(const char *hostname,
 	clnt->dns_name = strdup(hostname);
 	if (clnt->dns_name == NULL) {
 		nlist_free(NULL, clnt);
-		free(clnt);
 		return 0;
 	}
 

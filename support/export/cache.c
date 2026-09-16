@@ -2806,19 +2806,25 @@ static bool locations_to_fslocdata(struct nfs_fsloc_set *locations,
 			}
 			remaining -= (size_t)len;
 			ptr += len;
+			free(last_path);
 			last_path = rootpath;
+			rootpath = NULL;
 		}
 
 		seen = true;
 		free(rootpath);
+		rootpath = NULL;
 		free(server);
+		server = NULL;
 	}
 
+	free(last_path);
 	xlog(D_CALL, "%s: fslocdata='%s', ttl=%d",
 		__func__, fslocdata, *ttl);
 	return seen;
 
 out_false:
+	free(last_path);
 	free(rootpath);
 	free(server);
 	return false;

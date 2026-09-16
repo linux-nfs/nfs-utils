@@ -17,6 +17,7 @@
 #include "xlog.h"
 
 static struct event_base *evbase;
+static struct event *srv_ev;
 static struct reexpdb_backend_plugin *dbbackend = &sqlite_plug_ops;
 
 /* assert_safe() always evalutes it argument, as it might have
@@ -133,21 +134,44 @@ static void client_cb(evutil_socket_t cl, short ev, void *d)
 	}
 }
 
+static void srv_reenable_cb(evutil_socket_t fd, short ev, void *d)
+{
+	(void)fd;
+	(void)ev;
+	(void)d;
+	if (srv_ev)
+		event_add(srv_ev, NULL);
+}
+
 static void srv_cb(evutil_socket_t fd, short ev, void *d)
 {
 	int cl = accept4(fd, NULL, NULL, SOCK_NONBLOCK);
 	struct event *client_ev;
+
+	if (cl == -1) {
+		if (errno == EMFILE || errno == ENFILE || errno == ENOMEM ||
+				errno == ENOBUFS) {
+			struct timeval tv = {0, 200000};
+			event_del(srv_ev);
+			event_base_once(evbase, -1, EV_TIMEOUT, srv_reenable_cb,
+					NULL, &tv);
+		}
+		return;
+	}
 	
 	(void)ev;
 	(void)d;
 
 	client_ev = event_new(evbase, cl, EV_READ | EV_PERSIST | EV_CLOSED, client_cb, event_self_cbarg());
-	event_add(client_ev, NULL);
+	if (!client_ev || event_add(client_ev, NULL) == -1) {
+		if (client_ev)
+			event_free(client_ev);
+		close(cl);
+	}
 }
 
 int main(void)
 {
-	struct event *srv_ev;
 	struct sockaddr_un addr;
 	socklen_t addr_len;
 	char *sock_file;

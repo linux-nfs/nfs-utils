@@ -81,6 +81,10 @@ static int decode_blk_signature(uint32_t **pp, uint32_t * end,
 		BLK_READBUF(p, end, 12);
 		READ64(comp->bs_offset);
 		READ32(siglen);
+		if (siglen == 0) {
+			BL_LOG_ERR("0 length signature component\n");
+			goto out_err;
+		}
 		comp->bs_length = siglen;
 		BLK_READBUF(p, end, siglen);
 		/* Note we rely here on fact that sig is used immediately

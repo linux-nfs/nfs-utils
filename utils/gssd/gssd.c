@@ -98,6 +98,7 @@ static struct event_base *evbase = NULL;
 
 int upcall_timeout = DEF_UPCALL_TIMEOUT;
 static bool cancel_timed_out_upcalls = false;
+pthread_t watchdog_tid;
 
 TAILQ_HEAD(topdir_list_head, topdir) topdir_list;
 
@@ -517,6 +518,61 @@ gssd_clnt_krb5_cb(int UNUSED(fd), short UNUSED(which), void *data)
 	handle_krb5_upcall(clp);
 }
 
+static void
+cleanup_active_thread_list(void)
+{
+	struct upcall_thread_info *info;
+	bool cancelled = false;
+	void *tret, *saveprev;
+	int err;
+
+	pthread_mutex_lock(&active_thread_list_lock);
+	TAILQ_FOREACH(info, &active_thread_list, list) {
+		err = pthread_tryjoin_np(info->tid, &tret);
+		switch (err) {
+		case 0:
+			saveprev = info->list.tqe_prev;
+			TAILQ_REMOVE(&active_thread_list, info, list);
+			free(info);
+			info = saveprev;
+			break;
+		case EBUSY:
+			pthread_cancel(info->tid);
+			do_error_downcall(info->fd, info->uid, -ETIMEDOUT);
+			cancelled = true;
+			break;
+		default:
+			/* EDEADLK, EINVAL, and ESRCH... none of which should happen! */
+			printerr(0, "watchdog: attempt to join thread id 0x%lx returned %d (%s)!\n",
+					info->tid, err, strerror(err));
+			break;
+		}
+	}
+	if (cancelled) {
+		TAILQ_FOREACH(info, &active_thread_list, list) {
+			err = pthread_tryjoin_np(info->tid, &tret);
+			switch (err) {
+			case EBUSY:
+				printerr(0, "watchdog: thread id 0x%lx still busy on shutdown\n",
+					 info->tid);
+				/* fall through */
+			default:
+				/* EDEADLK, EINVAL, and ESRCH... none of which should happen! */
+				printerr(0, "watchdog: attempt to join thread id 0x%lx returned %d (%s)!\n",
+						info->tid, err, strerror(err));
+				/* fall through */
+			case 0:
+				saveprev = info->list.tqe_prev;
+				TAILQ_REMOVE(&active_thread_list, info, list);
+				free(info);
+				info = saveprev;
+				break;
+			}
+		}
+	}
+	pthread_mutex_unlock(&active_thread_list_lock);
+}
+
 /*
  * scan_active_thread_list:
  *
@@ -646,6 +702,7 @@ start_watchdog_thread(void)
 		printerr(0, "ERROR: pthread_create failed: ret %d: %s\n",
 			 ret, strerror(errno));
 	}
+	watchdog_tid = th;
 	return ret;
 }
 
@@ -1307,6 +1364,9 @@ main(int argc, char *argv[])
 	rc = event_base_dispatch(evbase);
 
 	printerr(0, "event_dispatch() returned %i!\n", rc);
+
+	pthread_cancel(watchdog_tid);
+	cleanup_active_thread_list();
 
 	gssd_destroy_krb5_principals(root_uses_machine_creds);
 

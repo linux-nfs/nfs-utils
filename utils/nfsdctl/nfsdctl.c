@@ -59,6 +59,9 @@ static int nfsd_nl_family;
 /* The highest attribute index supported by NFSD_CMD_THREADS_SET on this kernel */
 int nfsd_threads_max_nlattr;
 
+/* The same for NFSD_CMD_LISTENER_SET */
+int nfsd_listener_max_nlattr;
+
 struct nfs_version {
 	uint8_t	major;
 	uint8_t	minor;
@@ -77,6 +80,15 @@ struct nfs_version nfsd_versions[MAX_NFS_VERSIONS];
 
 int nfsd_socket_count;
 struct server_socket nfsd_sockets[MAX_NFSD_SOCKETS];
+
+/* Programs the kernel reported in the last LISTENER_SET reply. */
+#define MAX_RPCB_PROGS			16
+
+static int nfsd_rpcb_prog_count;
+static struct nfsd_rpcb_prog nfsd_rpcb_progs[MAX_RPCB_PROGS];
+
+/* Did a LISTENER_SET reply actually reach parse_listener_set()? */
+static bool nfsd_rpcb_reply_seen;
 
 const char *taskname;
 
@@ -304,6 +316,57 @@ static void parse_listener_get(struct genlmsghdr *gnlh)
 	nfsd_socket_count = idx;
 }
 
+/*
+ * A LISTENER_SET that asked to own rpcbind answers with the programs to
+ * register and the listeners that came up.
+ */
+static void parse_listener_set(struct genlmsghdr *gnlh)
+{
+	struct nlattr *attr;
+	int rem, idx = 0;
+
+	memset(nfsd_sockets, '\0', sizeof(*nfsd_sockets) * MAX_NFSD_SOCKETS);
+	nfsd_rpcb_prog_count = 0;
+
+	nla_for_each_attr(attr, genlmsg_attrdata(gnlh, 0),
+			  genlmsg_attrlen(gnlh, 0), rem) {
+		struct nfsd_rpcb_prog *p;
+		struct nlattr *a;
+		int i;
+
+		switch (nla_type(attr)) {
+		case NFSD_A_SERVER_SOCK_ADDR:
+			if (idx >= MAX_NFSD_SOCKETS)
+				break;
+			parse_sock_nest(attr, &nfsd_sockets[idx]);
+			++idx;
+			break;
+		case NFSD_A_SERVER_SOCK_RPCBIND:
+			if (nfsd_rpcb_prog_count >= MAX_RPCB_PROGS)
+				break;
+			p = &nfsd_rpcb_progs[nfsd_rpcb_prog_count];
+			memset(p, '\0', sizeof(*p));
+			nla_for_each_nested(a, attr, i) {
+				switch (nla_type(a)) {
+				case NFSD_A_RPCBIND_PROGRAM:
+					p->program = nla_get_u32(a);
+					break;
+				case NFSD_A_RPCBIND_VERSION:
+					p->version = nla_get_u32(a);
+					break;
+				case NFSD_A_RPCBIND_FLAGS:
+					p->flags = nla_get_u32(a);
+					break;
+				}
+			}
+			++nfsd_rpcb_prog_count;
+			break;
+		}
+	}
+	nfsd_socket_count = idx;
+	nfsd_rpcb_reply_seen = true;
+}
+
 static void parse_threads_get(struct genlmsghdr *gnlh)
 {
 	struct nlattr *attr;
@@ -404,6 +467,9 @@ static int recv_handler(struct nl_msg *msg, void *arg)
 		break;
 	case NFSD_CMD_LISTENER_GET:
 		parse_listener_get(gnlh);
+		break;
+	case NFSD_CMD_LISTENER_SET:
+		parse_listener_set(gnlh);
 		break;
 	case NFSD_CMD_POOL_MODE_GET:
 		parse_pool_mode_get(gnlh);
@@ -576,8 +642,29 @@ out:
 
 static int query_nfsd_nl_policy(struct nl_sock *sock)
 {
-	return query_nfsd_nl_cmd_policy(sock, NFSD_CMD_THREADS_SET,
-					&nfsd_threads_max_nlattr);
+	int ret;
+
+	ret = query_nfsd_nl_cmd_policy(sock, NFSD_CMD_THREADS_SET,
+				       &nfsd_threads_max_nlattr);
+	if (ret)
+		return ret;
+
+	/*
+	 * A kernel that offers NFSD_A_SERVER_SOCK_USERSPACE_RPCBIND expects
+	 * this program to register the listeners itself.
+	 */
+	return query_nfsd_nl_cmd_policy(sock, NFSD_CMD_LISTENER_SET,
+					&nfsd_listener_max_nlattr);
+}
+
+static bool userspace_rpcbind_supported(void)
+{
+#ifdef HAVE_LIBTIRPC
+	return nfsd_listener_max_nlattr >= NFSD_A_SERVER_SOCK_USERSPACE_RPCBIND;
+#else
+	/* No rpcb_set() here, so leave the registration to the kernel. */
+	return false;
+#endif
 }
 
 static void status_usage(void)
@@ -1340,11 +1427,14 @@ out_inval:
 
 static int set_listeners(struct nl_sock *sock)
 {
+	bool userspace_rpcbind = userspace_rpcbind_supported();
 	struct genlmsghdr *ghdr;
 	struct nlmsghdr *nlh;
 	struct nl_msg *msg;
 	struct nl_cb *cb;
 	int i, ret;
+
+	nfsd_rpcb_reply_seen = false;
 
 	if (!nfsd_nl_family_setup(sock))
 		return 1;
@@ -1382,6 +1472,21 @@ static int set_listeners(struct nl_sock *sock)
 		nla_nest_end(msg, a);
 	}
 
+	/*
+	 * Take rpcbind registration off the kernel. It made those calls
+	 * under nfsd_mutex, where a slow rpcbind stalled every other NFSD
+	 * netlink operation.
+	 *
+	 * Losing this flag would leave the kernel owning rpcbind while this
+	 * program went on to rewrite the entries, so do not send without it.
+	 */
+	if (userspace_rpcbind &&
+	    nla_put_flag(msg, NFSD_A_SERVER_SOCK_USERSPACE_RPCBIND)) {
+		xlog(L_ERROR, "Unable to request rpcbind ownership");
+		ret = 1;
+		goto out;
+	}
+
 	ghdr = nlmsg_data(nlh);
 	ghdr->cmd = NFSD_CMD_LISTENER_SET;
 
@@ -1409,6 +1514,22 @@ static int set_listeners(struct nl_sock *sock)
 	if (ret < 0) {
 		xlog(L_ERROR, "Error: %s", strerror(-ret));
 		ret = 1;
+	}
+
+	/*
+	 * recv_handler() filled nfsd_sockets and nfsd_rpcb_progs from the
+	 * reply, which names only the listeners that came up. Without that
+	 * reply there is nothing to register, and registering anyway would
+	 * clear the entries the kernel installed and put nothing back.
+	 */
+	if (!ret && userspace_rpcbind) {
+		if (nfsd_rpcb_reply_seen)
+			nfsd_rpcb_register(nfsd_sockets, nfsd_socket_count,
+					   nfsd_rpcb_progs,
+					   nfsd_rpcb_prog_count);
+		else
+			xlog(L_WARNING,
+			     "no rpcbind info in the listener_set reply. Leaving the rpcbind registrations alone.");
 	}
 out_cb:
 	nl_cb_put(cb);

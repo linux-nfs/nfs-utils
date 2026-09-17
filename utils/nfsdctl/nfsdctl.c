@@ -1493,8 +1493,14 @@ static int set_listeners(struct nl_sock *sock)
 			goto out;
 		}
 
-		nla_put(msg, NFSD_A_SOCK_ADDR, sizeof(sock->ss), &sock->ss);
-		nla_put_string(msg, NFSD_A_SOCK_TRANSPORT_NAME, sock->name);
+		if (nla_put(msg, NFSD_A_SOCK_ADDR, sizeof(sock->ss),
+			    &sock->ss) ||
+		    nla_put_string(msg, NFSD_A_SOCK_TRANSPORT_NAME,
+				   sock->name)) {
+			xlog(L_ERROR, "Too many listeners for one netlink message");
+			ret = 1;
+			goto out;
+		}
 		nla_nest_end(msg, a);
 	}
 

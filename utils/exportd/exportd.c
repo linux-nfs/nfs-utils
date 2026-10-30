@@ -61,27 +61,18 @@ cleanup_lockfiles (void)
 	unlink(etab.lockfn);
 }
 
+/*
+ * Called from main() once cache_process() has seen SIGINT or SIGTERM,
+ * never from a signal handler: see cache_block_signals().
+ */
 static void
 killer (int sig)
 {
-	if (num_threads > 1) {
-		/* play Kronos and eat our children */
-		kill(0, SIGTERM);
-		cache_wait_for_workers("exportd");
-	}
 	cleanup_lockfiles();
 	free_state_path_names(&etab);
 	xlog (L_NOTICE, "Caught signal %d, exiting.", sig);
 
 	exit(0);
-}
-
-static void
-sig_hup (int UNUSED(sig))
-{
-	/* don't exit on SIGHUP */
-	xlog (L_NOTICE, "Received SIGHUP... Ignoring.\n");
-	return;
 }
 
 inline static void
@@ -96,12 +87,7 @@ set_signals(void)
 	/* WARNING: the following works on Linux and SysV, but not BSD! */
 	sigaction(SIGCHLD, &sa, NULL);
 
-	sa.sa_handler = killer;
-	sigaction(SIGINT, &sa, NULL);
-	sigaction(SIGTERM, &sa, NULL);
-
-	sa.sa_handler = sig_hup;
-	sigaction(SIGHUP, &sa, NULL);
+	cache_block_signals();
 }
 
 static void
@@ -242,8 +228,10 @@ main(int argc, char **argv)
 	v4clients_init();
 
 	/* Process incoming upcalls */
-	while (cache_process(NULL) >= 0)
-		;
+	while (cache_process(NULL) >= 0) {
+		if (cache_stop_signal())
+			killer(cache_stop_signal());
+	}
 
 	xlog(L_ERROR, "%s: process loop terminated unexpectedly(%m). Exiting...\n",
 		progname);

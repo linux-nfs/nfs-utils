@@ -851,12 +851,13 @@ main(int argc, char **argv)
 	sa.sa_handler = SIG_IGN;
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
-	sigaction(SIGHUP, &sa, NULL);
-	sigaction(SIGINT, &sa, NULL);
-	sigaction(SIGTERM, &sa, NULL);
 	sigaction(SIGPIPE, &sa, NULL);
 	/* WARNING: the following works on Linux and SysV, but not BSD! */
 	sigaction(SIGCHLD, &sa, NULL);
+
+	/* Hold HUP, INT and TERM until my_svc_run() rather than dropping
+	 * them while we register with rpcbind */
+	cache_block_signals();
 
 	unregister_services();
 	if (version2()) {
@@ -870,8 +871,6 @@ main(int argc, char **argv)
 					MOUNTVERS_NFSV3, mount_dispatch, port);
 	if (version23() && listeners == 0)
 		xlog(L_WARNING, "mountd: No V2 or V3 listeners created!");
-
-	cache_block_signals();
 
 	if (!foreground) {
 		/* We first fork off a child. */

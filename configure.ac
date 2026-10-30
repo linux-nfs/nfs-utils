@@ -247,6 +247,12 @@ AC_ARG_ENABLE(nfsrahead,
 		PKG_CHECK_MODULES([LIBMOUNT], [mount])
 	fi
 
+AC_ARG_ENABLE(nfs-fh-verify,
+	[AS_HELP_STRING([--disable-nfs-fh-verify],[disable nfs-fh-verify command @<:@default=no@:>@])],
+	enable_nfs_fh_verify=$enableval,
+	enable_nfs_fh_verify="yes")
+	AM_CONDITIONAL(CONFIG_NFS_FH_VERIFY, [test "$enable_nfs_fh_verify" = "yes" ])
+
 AC_ARG_ENABLE(nfsdcltrack,
 	[AS_HELP_STRING([--enable-nfsdcltrack],[enable NFSv4 clientid tracking programs @<:@default=no@:>@])],
 	enable_nfsdcltrack=$enableval,
@@ -753,6 +759,7 @@ AC_CONFIG_FILES([
 	tools/mountstats/Makefile
 	tools/nfs-iostat/Makefile
 	tools/nfsrahead/Makefile
+	tools/nfs-fh-verify/Makefile
 	tools/rpcctl/Makefile
 	tools/nfsdclnts/Makefile
 	tools/nfsconf/Makefile

@@ -1,0 +1,171 @@
+.\" Manpage for nfs-fh-verify.
+.nh
+.ad l
+.TH NFS-FH-VERIFY 8 "20 May 2026" "nfs-utils" "System Manager's Manual"
+.SH NAME
+nfs-fh-verify \- verify NFS filehandle signatures produced by knfsd
+
+.SH SYNOPSIS
+.B nfs-fh-verify
+.B \-k
+.I fh-key-file
+.RB [ \-q ]
+.RB [ \-v ]
+
+.SH DESCRIPTION
+.B nfs-fh-verify
+reads NFS filehandles in ASCII hex from standard input, one filehandle per
+line, and reports whether each filehandle's trailing 8-byte SipHash-2-4
+Message Authentication Code (MAC) verifies under the key derived from
+.IR fh-key-file .
+It is intended for offline analysis of filehandles captured from network
+traces, for example with tcpdump(8) or tshark(1).
+
+The kernel NFS server (knfsd) optionally appends a SipHash-2-4 MAC to
+filehandles for exports marked with the
+.B sign_fh
+export option. The MAC is keyed by a 128-bit secret derived from a key
+file passed to the server via
+.BR nfsdctl (8).
+This tool reproduces that key derivation and MAC computation so that
+filehandles can be validated without involving the running server.
+
+.SH OPTIONS
+.TP
+.BI \-k " fh-key-file"
+Path to the filehandle signing key file. This is the same file passed to
+.B nfsdctl
+and configured via the
+.B fh-key-file
+setting in
+.BR nfsd (7).
+The file's contents are hashed (SHA-1) into a 16-byte key that is then
+interpreted as a SipHash-2-4 key.
+.TP
+.B \-q
+Quiet mode: print only the per-filehandle verdict
+.RB ( OK ", " BAD ", or " MALFORMED ),
+suppressing the input hex.
+.TP
+.B \-v
+Verbose mode: also print the computed MAC and the trailing 8 MAC bytes
+extracted from each filehandle, in hex. Useful when debugging captures or
+disagreements between client and server.
+.TP
+.B \-h
+Show usage and exit.
+
+.SH INPUT FORMAT
+One filehandle per line. Each line may contain:
+.IP \(bu 2
+An optional
+.B 0x
+prefix.
+.IP \(bu 2
+Hex digits in upper or lower case.
+.IP \(bu 2
+.B ":"
+or whitespace between byte pairs (ignored).
+.IP \(bu 2
+A
+.B "#"
+to start a trailing comment.
+.PP
+Blank lines and comment-only lines are skipped. An odd number of hex
+nibbles, a non-hex character, or a filehandle longer than the NFSv4
+maximum (128 bytes) is reported as
+.BR MALFORMED .
+
+.SH VERDICTS
+.TP
+.B OK
+The last 8 bytes of the filehandle match
+.BR siphash24 ( fh [0..n\-8] ", " key ).
+.TP
+.B BAD
+The MAC does not verify. The filehandle was either signed with a
+different key, tampered with, or never signed at all (note: signing is
+per-export, so an unsigned filehandle from an export without
+.B sign_fh
+will also appear as
+.BR BAD ).
+.TP
+.B MALFORMED
+The line could not be parsed as a hex filehandle, or was too short to
+contain an 8-byte MAC.
+
+.SH EXIT STATUS
+.TP
+.B 0
+Every parsed filehandle verified
+.BR OK .
+.TP
+.B 1
+At least one filehandle was
+.B BAD
+or
+.BR MALFORMED .
+.TP
+.B 2
+Setup error: bad usage, key file unreadable, internal self-test failure.
+
+.SH EXAMPLES
+Watch live traffic on the loopback interface and verify every filehandle
+as it goes by \(em a quick way to confirm that an export is actually
+signing filehandles:
+.PP
+.RS 4
+.nf
+$ tshark \-i lo \-T fields \-E separator=\\n \-e nfs.fhandle \\
+    | nfs\-fh\-verify \-k /etc/nfs_fh.key
+.fi
+.RE
+.PP
+Capturing on the loopback interface
+.RB ( "\-i lo" )
+only sees NFS traffic when the server has mounted one of its own exports,
+so that client and server are the same host. To check filehandles handed
+out to a remote client, capture on the interface that carries the NFS
+traffic instead (for example
+.BR "\-i eth0" ).
+.PP
+The
+.B nfs.fhandle
+field carries the raw filehandle for both NFSv3 and NFSv4, and
+.B "\-E separator=\en"
+puts each filehandle on its own line so that responses carrying more than
+one filehandle are checked individually.
+.PP
+Verify filehandles extracted from a saved capture:
+.PP
+.RS 4
+.nf
+$ tshark \-r capture.pcap \-Y nfs \-T fields \-E separator=\\n \\
+    \-e nfs.fhandle | nfs\-fh\-verify \-k /etc/nfs_fh.key
+.fi
+.RE
+.PP
+Summarize the verdicts over a large capture:
+.PP
+.RS 4
+.nf
+$ tshark \-r capture.pcap \-T fields \-E separator=\\n \-e nfs.fhandle \\
+    | nfs\-fh\-verify \-q \-k /etc/nfs_fh.key | sort | uniq \-c
+.fi
+.RE
+.PP
+Inline check of one filehandle with debug output:
+.PP
+.RS 4
+.nf
+$ echo 0x01000601...deadbeef | nfs\-fh\-verify \-v \-k /etc/nfs_fh.key
+.fi
+.RE
+
+.SH SEE ALSO
+.BR nfsdctl (8),
+.BR exportfs (8),
+.BR exports (5).
+
+.SH AUTHORS
+Written for the nfs-utils project.

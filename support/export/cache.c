@@ -13,10 +13,12 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <sys/select.h>
+#include <sys/signalfd.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <signal.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -3880,6 +3882,76 @@ int cache_process_req(fd_set *readfds)
 	return cnt;
 }
 
+/*
+ * SIGHUP, SIGINT and SIGTERM are held blocked from cache_block_signals()
+ * on, so no handler can run while the daemon is in the middle of malloc()
+ * or anything else that isn't async-signal-safe.  A single-process daemon
+ * reads them from cache_sigfd in cache_process().  Worker children get the
+ * default actions back, and the parent of the workers takes them with a
+ * handler that does nothing but pass SIGTERM on to the process group.
+ */
+static int cache_sigfd = -1;
+static volatile sig_atomic_t stop_signal;
+
+static void cache_signal_mask(sigset_t *mask)
+{
+	sigemptyset(mask);
+	sigaddset(mask, SIGHUP);
+	sigaddset(mask, SIGINT);
+	sigaddset(mask, SIGTERM);
+}
+
+/**
+ * cache_block_signals - start taking termination signals via signalfd
+ *
+ * Call this where a daemon would otherwise install its SIGTERM handler.
+ * Once cache_process() has picked up SIGINT or SIGTERM,
+ * cache_stop_signal() returns it and the caller should shut down.
+ */
+void cache_block_signals(void)
+{
+	struct sigaction sa;
+	sigset_t mask;
+
+	cache_signal_mask(&mask);
+	if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0)
+		xlog(L_FATAL, "cannot block signals: %m");
+
+	/* An ignored signal is discarded, not left pending for signalfd */
+	sa.sa_handler = SIG_DFL;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGHUP, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+
+	cache_sigfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+	if (cache_sigfd < 0)
+		xlog(L_FATAL, "cannot create signalfd: %m");
+}
+
+/**
+ * cache_stop_signal - the SIGINT or SIGTERM that asked us to exit, or 0
+ */
+int cache_stop_signal(void)
+{
+	return stop_signal;
+}
+
+static void cache_read_signals(void)
+{
+	struct signalfd_siginfo si;
+
+	while (read(cache_sigfd, &si, sizeof(si)) == sizeof(si)) {
+		if (si.ssi_signo == SIGHUP) {
+			/* don't exit on SIGHUP */
+			xlog(L_NOTICE, "Received SIGHUP... Ignoring.");
+			continue;
+		}
+		stop_signal = si.ssi_signo;
+	}
+}
+
 /**
  * cache_process - process incoming upcalls
  * Returns -ve on error, or number of fds in svc_fds
@@ -3897,6 +3969,8 @@ int cache_process(fd_set *readfds)
 	}
 	cache_set_fds(readfds);
 	v4clients_set_fds(readfds);
+	if (cache_sigfd >= 0)
+		FD_SET(cache_sigfd, readfds);
 
 	if (delayed || delayed_expkey || delayed_export) {
 		time_t now = time(NULL);
@@ -3938,6 +4012,11 @@ int cache_process(fd_set *readfds)
 		return -1;
 
 	default:
+		if (cache_sigfd >= 0 && FD_ISSET(cache_sigfd, readfds)) {
+			cache_read_signals();
+			FD_CLR(cache_sigfd, readfds);
+			selret--;
+		}
 		selret -= cache_process_req(readfds);
 		selret -= v4clients_process(readfds);
 		if (selret < 0)
@@ -4100,6 +4179,8 @@ cache_wait_for_workers(char *prog)
 		if (pid < 0) {
 			if (errno == ECHILD)
 				return; /* no more children */
+			if (errno == EINTR)
+				continue; /* cache_parent_signal() */
 			xlog(L_FATAL, "%s: can't wait: %s\n", prog,
 					strerror(errno));
 		}
@@ -4137,10 +4218,26 @@ static struct nl_sock *nl_cmd_sock_reopen(struct nl_sock *old)
 	return sock;
 }
 
+/*
+ * SIGINT/SIGTERM handler for the parent of the workers.  Only
+ * async-signal-safe calls here: the workers die of the SIGTERM,
+ * cache_wait_for_workers() returns, and the caller cleans up.
+ */
+static void cache_parent_signal(int sig)
+{
+	if (!stop_signal) {
+		stop_signal = sig;
+		/* play Kronos and eat our children */
+		kill(0, SIGTERM);
+	}
+}
+
 /* Fork num_threads worker children and wait for them */
 int
 cache_fork_workers(char *prog, int num_threads)
 {
+	struct sigaction sa;
+	sigset_t mask;
 	int i;
 	pid_t pid;
 
@@ -4184,7 +4281,6 @@ cache_fork_workers(char *prog, int num_threads)
 			 * so that workers die naturally when sent them.
 			 * Only the parent unregisters with pmap and
 			 * hence needs to do special SIGTERM handling. */
-			struct sigaction sa;
 			sa.sa_handler = SIG_DFL;
 			sa.sa_flags = 0;
 			sigemptyset(&sa.sa_mask);
@@ -4192,12 +4288,36 @@ cache_fork_workers(char *prog, int num_threads)
 			sigaction(SIGINT, &sa, NULL);
 			sigaction(SIGTERM, &sa, NULL);
 
+			if (cache_sigfd >= 0) {
+				close(cache_sigfd);
+				cache_sigfd = -1;
+			}
+			cache_signal_mask(&mask);
+			sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
 			/* fall into my_svc_run in caller */
 			return 1;
 		}
 	}
 
 	/* in parent */
+	if (cache_sigfd >= 0) {
+		close(cache_sigfd);
+		cache_sigfd = -1;
+	}
+	sa.sa_handler = cache_parent_signal;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+	sa.sa_handler = SIG_IGN;
+	sigaction(SIGHUP, &sa, NULL);
+	cache_signal_mask(&mask);
+	sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
 	cache_wait_for_workers(prog);
+	if (stop_signal)
+		xlog(L_NOTICE, "%s: caught signal %d, workers stopped",
+		     prog, stop_signal);
 	return 0;
 }

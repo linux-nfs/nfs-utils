@@ -42,7 +42,10 @@ ha_callout(char *event, char *arg1, char *arg2, int arg3)
 	sigaction(SIGCHLD, &newact, &oldact);
 	pid = fork();
 	switch (pid) {
-		case 0: execl(ha_callout_prog, ha_callout_prog,
+		case 0: /* mountd keeps SIGTERM et al blocked for signalfd */
+			sigemptyset(&newact.sa_mask);
+			sigprocmask(SIG_SETMASK, &newact.sa_mask, NULL);
+			execl(ha_callout_prog, ha_callout_prog,
 				event, arg1, arg2, 
 			      arg3 < 0 ? NULL : buf,
 			      NULL);

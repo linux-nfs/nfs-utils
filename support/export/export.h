@@ -32,6 +32,8 @@ int		cache_export(nfs_export *exp, char *path);
 int		cache_fork_workers(char *prog, int num_threads);
 void		cache_wait_for_workers(char *prog);
 int		cache_process(fd_set *readfds);
+void		cache_block_signals(void);
+int		cache_stop_signal(void);
 
 bool ipaddr_client_matches(nfs_export *exp, struct addrinfo *ai);
 bool namelist_client_matches(nfs_export *exp, char *dom);

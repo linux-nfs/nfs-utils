@@ -105,5 +105,7 @@ my_svc_run(void)
 		}
 		if (selret)
 			svc_getreqset(&readfds);
+		if (cache_stop_signal())
+			return;
 	}
 }

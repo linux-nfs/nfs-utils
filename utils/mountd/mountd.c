@@ -124,30 +124,18 @@ cleanup_lockfiles (void)
 }
 
 /*
- * Signal handler.
+ * Called from main() once my_svc_run() has seen SIGINT or SIGTERM,
+ * never from a signal handler: see cache_block_signals().
  */
 static void
 killer (int sig)
 {
 	unregister_services();
-	if (num_threads > 1) {
-		/* play Kronos and eat our children */
-		kill(0, SIGTERM);
-		cache_wait_for_workers("mountd");
-	}
 	cleanup_lockfiles();
 	free_state_path_names(&etab);
 	free_state_path_names(&rmtab);
 	xlog (L_NOTICE, "Caught signal %d, un-registering and exiting.", sig);
 	exit(0);
-}
-
-static void
-sig_hup (int UNUSED(sig))
-{
-	/* don't exit on SIGHUP */
-	xlog (L_NOTICE, "Received SIGHUP... Ignoring.\n");
-	return;
 }
 
 bool_t
@@ -883,11 +871,7 @@ main(int argc, char **argv)
 	if (version23() && listeners == 0)
 		xlog(L_WARNING, "mountd: No V2 or V3 listeners created!");
 
-	sa.sa_handler = killer;
-	sigaction(SIGINT, &sa, NULL);
-	sigaction(SIGTERM, &sa, NULL);
-	sa.sa_handler = sig_hup;
-	sigaction(SIGHUP, &sa, NULL);
+	cache_block_signals();
 
 	if (!foreground) {
 		/* We first fork off a child. */
@@ -938,6 +922,9 @@ main(int argc, char **argv)
 
 	xlog(L_NOTICE, "Version " VERSION " starting");
 	my_svc_run();
+
+	if (cache_stop_signal())
+		killer(cache_stop_signal());
 
 	xlog(L_ERROR, "RPC service loop terminated unexpectedly. Exiting...\n");
 	unregister_services();

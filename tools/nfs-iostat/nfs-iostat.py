@@ -436,6 +436,8 @@ class DeviceData:
 
         if which == 0:
             self.__print_rpc_op_stats('READ', sample_time, use_mb)
+            if 'READ_PLUS' in self.__rpc_data:
+                self.__print_rpc_op_stats('READ_PLUS', sample_time, use_mb)
             self.__print_rpc_op_stats('WRITE', sample_time, use_mb)
         elif which == 1:
             self.__print_rpc_op_stats('GETATTR', sample_time, use_mb)
@@ -449,6 +451,8 @@ class DeviceData:
             self.__print_dir_cache_stats(sample_time)
         elif which == 3:
             self.__print_rpc_op_stats('READ', sample_time, use_mb)
+            if 'READ_PLUS' in self.__rpc_data:
+                self.__print_rpc_op_stats('READ_PLUS', sample_time, use_mb)
             self.__print_rpc_op_stats('WRITE', sample_time, use_mb)
             self.__print_page_stats(sample_time)
 

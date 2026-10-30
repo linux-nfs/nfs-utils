@@ -10,6 +10,8 @@ nfsiostat \- Emulate iostat for NFS mount points using /proc/self/mountstats
 The
 .B nfsiostat
 command displays NFS client per-mount statistics. 
+The default report displays READ and WRITE statistics.  It also displays
+READ_PLUS when it is present in /proc/self/mountstats.
 .TP 
 <interval>
 specifies the amount of time in seconds between each report.
@@ -126,7 +128,8 @@ only print stats for first LIST mount points
 display throughput in megabytes per second
 .TP
 .B \-p " or " \-\-page
-displays statistics related to the page cache
+displays statistics related to the page cache, including READ_PLUS
+when it is present in /proc/self/mountstats
 .TP
 .B \-s " or " \-\-sort
 Sort NFS mount points by ops/second

@@ -242,10 +242,10 @@ AC_ARG_ENABLE(nfsrahead,
 	enable_nfsrahead=$enableval,
 	enable_nfsrahead="yes")
 	AM_CONDITIONAL(CONFIG_NFSRAHEAD, [test "$enable_nfsrahead" = "yes" ])
-	if test "$enable_nfsrahead" = yes; then
+	AS_IF([test "$enable_nfsrahead" = yes], [
 		dnl Check for -lmount
 		PKG_CHECK_MODULES([LIBMOUNT], [mount])
-	fi
+	])
 
 AC_ARG_ENABLE(nfs-fh-verify,
 	[AS_HELP_STRING([--disable-nfs-fh-verify],[disable nfs-fh-verify command @<:@default=no@:>@])],
@@ -282,11 +282,11 @@ AC_ARG_ENABLE(nfsdctl,
 	enable_nfsdctl=$enableval,
 	enable_nfsdctl="yes")
 	AM_CONDITIONAL(CONFIG_NFSDCTL, [test "$enable_nfsdctl" = "yes" ])
-	if test "$enable_nfsdctl" = yes; then
+	AS_IF([test "$enable_nfsdctl" = yes], [
 		AC_DEFINE([HAVE_NFSD_NETLINK], 1,
 	  		[Define to 1 if nfsd generic netlink support is available])
 		PKG_CHECK_MODULES(LIBREADLINE, readline)
-	fi
+	])
 
 AC_ARG_ENABLE(nfsv4server,
 	[AS_HELP_STRING([--enable-nfsv4server],[enable support for NFSv4 only server  @<:@default=no@:>@])],
